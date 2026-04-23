@@ -12,3 +12,8 @@ DATABASES = {
 }
 
 INSTALLED_APPS += ["django_extensions"]  # noqa: F405
+
+# Faster password hashing in tests/dev
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.MD5PasswordHasher",
+]

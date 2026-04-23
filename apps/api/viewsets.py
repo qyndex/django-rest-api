@@ -1,5 +1,5 @@
 """DRF viewsets for the REST API app."""
-from rest_framework import filters, viewsets
+from rest_framework import filters, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -17,6 +17,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description"]
     ordering_fields = ["name", "created_at"]
@@ -26,6 +27,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     """CRUD operations for products."""
 
     queryset = Product.objects.select_related("category").all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description"]
     ordering_fields = ["price", "stock", "created_at"]
@@ -34,6 +36,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action in ("create", "update", "partial_update"):
             return ProductCreateSerializer
         return ProductSerializer
+
+    def perform_create(self, serializer):
+        """Set created_by to the authenticated user."""
+        serializer.save(created_by=self.request.user)
 
     @action(detail=False, methods=["get"], url_path="active")
     def active_products(self, request: Request) -> Response:

@@ -1,4 +1,4 @@
-"""Tests for CategoryViewSet and ProductViewSet — search, ordering, custom actions."""
+"""Tests for CategoryViewSet and ProductViewSet — search, ordering, custom actions, auth."""
 import pytest
 from decimal import Decimal
 
@@ -40,20 +40,25 @@ class TestCategoryViewSet:
         res = api_client.get(f"{self.BASE}999999/")
         assert res.status_code == 404
 
-    def test_create_category(self, api_client):
+    def test_create_category(self, auth_client):
         payload = {"name": "New Cat", "description": "A description"}
-        res = api_client.post(self.BASE, payload, format="json")
+        res = auth_client.post(self.BASE, payload, format="json")
         assert res.status_code == 201
         assert res.json()["name"] == "New Cat"
 
-    def test_create_duplicate_name_returns_400(self, api_client):
+    def test_create_category_unauthenticated_rejected(self, api_client):
+        payload = {"name": "Anon Cat", "description": "No auth"}
+        res = api_client.post(self.BASE, payload, format="json")
+        assert res.status_code == 401
+
+    def test_create_duplicate_name_returns_400(self, auth_client):
         CategoryFactory(name="Dup")
-        res = api_client.post(self.BASE, {"name": "Dup"}, format="json")
+        res = auth_client.post(self.BASE, {"name": "Dup"}, format="json")
         assert res.status_code == 400
 
-    def test_update_category(self, api_client):
+    def test_update_category(self, auth_client):
         cat = CategoryFactory(name="Old Name")
-        res = api_client.put(
+        res = auth_client.put(
             f"{self.BASE}{cat.id}/",
             {"name": "New Name", "description": ""},
             format="json",
@@ -61,9 +66,9 @@ class TestCategoryViewSet:
         assert res.status_code == 200
         assert res.json()["name"] == "New Name"
 
-    def test_partial_update_category(self, api_client):
+    def test_partial_update_category(self, auth_client):
         cat = CategoryFactory(description="old desc")
-        res = api_client.patch(
+        res = auth_client.patch(
             f"{self.BASE}{cat.id}/",
             {"description": "new desc"},
             format="json",
@@ -71,10 +76,15 @@ class TestCategoryViewSet:
         assert res.status_code == 200
         assert res.json()["description"] == "new desc"
 
-    def test_delete_category(self, api_client):
+    def test_delete_category(self, auth_client):
+        cat = CategoryFactory()
+        res = auth_client.delete(f"{self.BASE}{cat.id}/")
+        assert res.status_code == 204
+
+    def test_delete_category_unauthenticated_rejected(self, api_client):
         cat = CategoryFactory()
         res = api_client.delete(f"{self.BASE}{cat.id}/")
-        assert res.status_code == 204
+        assert res.status_code == 401
 
     def test_search_by_name(self, api_client):
         CategoryFactory(name="Gadgets")
@@ -108,7 +118,7 @@ class TestProductViewSet:
         res = api_client.get(self.BASE)
         assert res.status_code == 200
 
-    def test_create_product(self, api_client):
+    def test_create_product(self, auth_client):
         cat = CategoryFactory()
         payload = {
             "name": "Widget",
@@ -118,19 +128,32 @@ class TestProductViewSet:
             "is_active": True,
             "category": cat.id,
         }
-        res = api_client.post(self.BASE, payload, format="json")
+        res = auth_client.post(self.BASE, payload, format="json")
         assert res.status_code == 201
         assert res.json()["name"] == "Widget"
 
-    def test_create_product_without_category(self, api_client):
-        payload = {"name": "Standalone", "price": "1.00", "stock": 5}
+    def test_create_product_unauthenticated_rejected(self, api_client):
+        payload = {"name": "Anon Product", "price": "1.00", "stock": 5}
         res = api_client.post(self.BASE, payload, format="json")
+        assert res.status_code == 401
+
+    def test_create_product_without_category(self, auth_client):
+        payload = {"name": "Standalone", "price": "1.00", "stock": 5}
+        res = auth_client.post(self.BASE, payload, format="json")
         assert res.status_code == 201
 
-    def test_create_product_negative_price_rejected(self, api_client):
+    def test_create_product_negative_price_rejected(self, auth_client):
         payload = {"name": "Bad Price", "price": "-1.00", "stock": 0}
-        res = api_client.post(self.BASE, payload, format="json")
+        res = auth_client.post(self.BASE, payload, format="json")
         assert res.status_code == 400
+
+    def test_create_product_sets_created_by(self, auth_client, regular_user):
+        payload = {"name": "Owned Item", "price": "10.00", "stock": 1}
+        res = auth_client.post(self.BASE, payload, format="json")
+        assert res.status_code == 201
+        product_id = res.json()["id"]
+        detail = auth_client.get(f"{self.BASE}{product_id}/")
+        assert detail.json()["created_by"] == regular_user.username
 
     def test_retrieve_product(self, api_client):
         product = ProductFactory(name="My Product")
@@ -144,7 +167,7 @@ class TestProductViewSet:
         res = api_client.get(f"{self.BASE}{product.id}/")
         assert res.json()["category_name"] == "Electronics"
 
-    def test_update_product(self, api_client):
+    def test_update_product(self, auth_client):
         product = ProductFactory()
         payload = {
             "name": "Updated",
@@ -152,21 +175,26 @@ class TestProductViewSet:
             "stock": 50,
             "is_active": True,
         }
-        res = api_client.put(f"{self.BASE}{product.id}/", payload, format="json")
+        res = auth_client.put(f"{self.BASE}{product.id}/", payload, format="json")
         assert res.status_code == 200
         assert res.json()["name"] == "Updated"
 
-    def test_partial_update_stock(self, api_client):
+    def test_partial_update_stock(self, auth_client):
         product = ProductFactory(stock=10)
-        res = api_client.patch(
+        res = auth_client.patch(
             f"{self.BASE}{product.id}/", {"stock": 99}, format="json"
         )
         assert res.status_code == 200
 
-    def test_delete_product(self, api_client):
+    def test_delete_product(self, auth_client):
+        product = ProductFactory()
+        res = auth_client.delete(f"{self.BASE}{product.id}/")
+        assert res.status_code == 204
+
+    def test_delete_product_unauthenticated_rejected(self, api_client):
         product = ProductFactory()
         res = api_client.delete(f"{self.BASE}{product.id}/")
-        assert res.status_code == 204
+        assert res.status_code == 401
 
     def test_search_by_name(self, api_client):
         ProductFactory(name="Blue Widget")

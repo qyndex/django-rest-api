@@ -6,6 +6,7 @@ imports.  Per-app fixtures (factories etc.) live in apps/*/tests/conftest.py.
 """
 import pytest
 from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 
@@ -46,4 +47,18 @@ def auth_client(api_client: APIClient, regular_user: User) -> APIClient:
 def admin_client(api_client: APIClient, admin_user: User) -> APIClient:
     """DRF test client authenticated as a superuser."""
     api_client.force_authenticate(user=admin_user)
+    return api_client
+
+
+@pytest.fixture
+def user_token(regular_user: User) -> str:
+    """Return a token string for the regular user."""
+    token, _ = Token.objects.get_or_create(user=regular_user)
+    return token.key
+
+
+@pytest.fixture
+def token_client(api_client: APIClient, user_token: str) -> APIClient:
+    """DRF test client authenticated via Token header."""
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {user_token}")
     return api_client

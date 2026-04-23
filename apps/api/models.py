@@ -1,4 +1,5 @@
 """Database models for the REST API app."""
+from django.conf import settings
 from django.db import models
 
 
@@ -27,6 +28,13 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True)
     category = models.ForeignKey(
         Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="products",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

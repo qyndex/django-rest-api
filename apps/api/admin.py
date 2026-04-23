@@ -13,8 +13,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ["name", "price", "stock", "is_active", "category", "created_at"]
-    list_filter = ["is_active", "category"]
+    list_display = ["name", "price", "stock", "is_active", "category", "created_by", "created_at"]
+    list_filter = ["is_active", "category", "created_by"]
     search_fields = ["name", "description"]
     list_editable = ["price", "stock", "is_active"]
     ordering = ["-created_at"]

@@ -51,7 +51,8 @@ class TestProductSerializer:
         data = ProductSerializer(product).data
         assert set(data.keys()) >= {
             "id", "name", "description", "price", "stock",
-            "is_active", "category", "category_name", "created_at", "updated_at",
+            "is_active", "category", "category_name", "created_by",
+            "created_at", "updated_at",
         }
 
     def test_category_name_from_related(self):
@@ -76,6 +77,18 @@ class TestProductSerializer:
         )
         assert serializer.is_valid()
         assert "created_at" not in serializer.validated_data
+
+    def test_created_by_is_read_only(self):
+        serializer = ProductSerializer(
+            data={
+                "name": "X",
+                "price": "1.00",
+                "stock": 1,
+                "created_by": 999,
+            }
+        )
+        assert serializer.is_valid()
+        assert "created_by" not in serializer.validated_data
 
 
 class TestProductCreateSerializer:
@@ -137,18 +150,34 @@ class TestURLRouting:
         res = api_client.get("/api/products/low-stock/")
         assert res.status_code in (200, 401, 403)
 
+    def test_auth_register_url_resolves(self, api_client):
+        res = api_client.post(
+            "/api/auth/register/",
+            {"username": "route_test", "password": "testpass123"},
+            format="json",
+        )
+        assert res.status_code == 201
+
+    def test_auth_login_url_resolves(self, api_client):
+        res = api_client.post(
+            "/api/auth/login/",
+            {"username": "nobody", "password": "wrong"},
+            format="json",
+        )
+        assert res.status_code == 401
+
 
 # ---------------------------------------------------------------------------
-# End-to-end lifecycle: create → read → update → delete
+# End-to-end lifecycle: create -> read -> update -> delete
 # ---------------------------------------------------------------------------
 
 
 class TestProductLifecycle:
-    def test_full_crud_lifecycle(self, api_client):
+    def test_full_crud_lifecycle(self, auth_client):
         cat = CategoryFactory()
 
         # Create
-        create_res = api_client.post(
+        create_res = auth_client.post(
             "/api/products/",
             {"name": "Lifecycle Widget", "price": "29.99", "stock": 10, "category": cat.id},
             format="json",
@@ -157,12 +186,12 @@ class TestProductLifecycle:
         product_id = create_res.json()["id"]
 
         # Read
-        read_res = api_client.get(f"/api/products/{product_id}/")
+        read_res = auth_client.get(f"/api/products/{product_id}/")
         assert read_res.status_code == 200
         assert read_res.json()["name"] == "Lifecycle Widget"
 
         # Update
-        update_res = api_client.patch(
+        update_res = auth_client.patch(
             f"/api/products/{product_id}/",
             {"stock": 0, "is_active": False},
             format="json",
@@ -170,31 +199,31 @@ class TestProductLifecycle:
         assert update_res.status_code == 200
 
         # Confirm no longer in active list
-        active_res = api_client.get("/api/products/active/")
+        active_res = auth_client.get("/api/products/active/")
         active_ids = [p["id"] for p in active_res.json()]
         assert product_id not in active_ids
 
         # Confirm appears in low-stock with threshold=1
-        low_res = api_client.get("/api/products/low-stock/?threshold=1")
+        low_res = auth_client.get("/api/products/low-stock/?threshold=1")
         low_ids = [p["id"] for p in low_res.json()["results"]]
         assert product_id in low_ids
 
         # Delete
-        delete_res = api_client.delete(f"/api/products/{product_id}/")
+        delete_res = auth_client.delete(f"/api/products/{product_id}/")
         assert delete_res.status_code == 204
 
         # Confirm 404 after delete
-        gone_res = api_client.get(f"/api/products/{product_id}/")
+        gone_res = auth_client.get(f"/api/products/{product_id}/")
         assert gone_res.status_code == 404
 
 
 class TestCategoryWithProducts:
-    def test_deleting_category_nullifies_product_category(self, api_client):
+    def test_deleting_category_nullifies_product_category(self, auth_client):
         cat = CategoryFactory()
         product = ProductFactory(category=cat)
 
-        api_client.delete(f"/api/categories/{cat.id}/")
+        auth_client.delete(f"/api/categories/{cat.id}/")
 
-        read_res = api_client.get(f"/api/products/{product.id}/")
+        read_res = auth_client.get(f"/api/products/{product.id}/")
         assert read_res.status_code == 200
         assert read_res.json()["category"] is None

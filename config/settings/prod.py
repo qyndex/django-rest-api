@@ -39,3 +39,6 @@ SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "true").lower() in (
 )
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+# Behind a TLS-terminating proxy (Traefik/Coolify) the app receives plain HTTP;
+# trust the forwarded-proto header so SECURE_SSL_REDIRECT doesn't loop forever.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
